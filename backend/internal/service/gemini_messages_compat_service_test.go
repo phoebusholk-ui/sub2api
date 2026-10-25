@@ -935,7 +935,9 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_DropsTrailingAssistantPref
 	contents, ok := req["contents"].([]any)
 	require.True(t, ok)
 	require.Len(t, contents, 1)
-	require.Equal(t, "user", contents[0].(map[string]any)["role"])
+	first, ok := contents[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "user", first["role"])
 }
 
 func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t *testing.T) {
