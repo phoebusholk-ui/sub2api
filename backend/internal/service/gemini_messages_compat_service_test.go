@@ -953,7 +953,9 @@ func TestDropTrailingGeminiModelTurn(t *testing.T) {
 	contents, ok := req["contents"].([]any)
 	require.True(t, ok)
 	require.Len(t, contents, 1)
-	require.Equal(t, "user", contents[0].(map[string]any)["role"])
+	first, ok := contents[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "user", first["role"])
 }
 
 func TestDropTrailingGeminiModelTurn_TrimsWrappedRequest(t *testing.T) {
@@ -962,7 +964,11 @@ func TestDropTrailingGeminiModelTurn_TrimsWrappedRequest(t *testing.T) {
 	normalized := dropTrailingGeminiModelTurn(body)
 	var req map[string]any
 	require.NoError(t, json.Unmarshal(normalized, &req))
-	require.Len(t, req["request"].(map[string]any)["contents"], 1)
+	nested, ok := req["request"].(map[string]any)
+	require.True(t, ok)
+	contents, ok := nested["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, 1)
 }
 
 func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t *testing.T) {
