@@ -897,6 +897,10 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 					},
 				},
 			},
+			map[string]any{
+				"role":    "user",
+				"content": "continue",
+			},
 		},
 		"tools": []any{
 			map[string]any{
@@ -938,6 +942,18 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_DropsTrailingAssistantPref
 	first, ok := contents[0].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "user", first["role"])
+}
+
+func TestDropTrailingGeminiModelTurn(t *testing.T) {
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"prefill"}]}],"generationConfig":{"maxOutputTokens":10}}`)
+
+	normalized := dropTrailingGeminiModelTurn(body)
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(normalized, &req))
+	contents, ok := req["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, 1)
+	require.Equal(t, "user", contents[0].(map[string]any)["role"])
 }
 
 func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t *testing.T) {

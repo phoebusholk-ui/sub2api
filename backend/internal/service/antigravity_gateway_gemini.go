@@ -126,6 +126,7 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 	}
 
 	// Antigravity 上游要求必须包含身份提示词，注入到请求中
+	body = dropTrailingGeminiModelTurn(body)
 	injectedBody, err := injectIdentityPatchToGeminiRequest(body)
 	if err != nil {
 		return nil, s.writeGoogleError(c, http.StatusBadRequest, "Invalid request body")
@@ -578,4 +579,29 @@ func filterEmptyPartsFromGeminiRequest(body []byte) ([]byte, error) {
 
 	payload["contents"] = filtered
 	return json.Marshal(payload)
+}
+
+// dropTrailingGeminiModelTurn removes assistant prefill content before generation.
+// Gemini generation requests must end with a user turn.
+func dropTrailingGeminiModelTurn(body []byte) []byte {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+
+	contents, ok := payload["contents"].([]any)
+	if !ok || len(contents) == 0 {
+		return body
+	}
+	last, ok := contents[len(contents)-1].(map[string]any)
+	if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(last["role"]))) != "model" {
+		return body
+	}
+
+	payload["contents"] = contents[:len(contents)-1]
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return normalized
 }

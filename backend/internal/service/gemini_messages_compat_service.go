@@ -1107,6 +1107,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	if filteredBody, err := filterEmptyPartsFromGeminiRequest(body); err == nil {
 		body = filteredBody
 	}
+	body = dropTrailingGeminiModelTurn(body)
 
 	switch action {
 	case "generateContent", "streamGenerateContent", "countTokens":
