@@ -929,7 +929,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 }
 
 func TestConvertClaudeMessagesToGeminiGenerateContent_DropsTrailingAssistantPrefill(t *testing.T) {
-	body := []byte(`{"messages":[{"role":"user","content":"question"},{"role":"assistant","content":"prefill"}]}`)
+	body := []byte(`{"messages":[{"role":"user","content":"question"},{"role":"assistant","content":"prefill 1"},{"role":"assistant","content":"prefill 2"}]}`)
 
 	converted, err := convertClaudeMessagesToGeminiGenerateContent(body)
 	require.NoError(t, err)
@@ -945,7 +945,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_DropsTrailingAssistantPref
 }
 
 func TestDropTrailingGeminiModelTurn(t *testing.T) {
-	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"prefill"}]}],"generationConfig":{"maxOutputTokens":10}}`)
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"prefill 1"}]},{"role":"model","parts":[{"text":"prefill 2"}]}],"generationConfig":{"maxOutputTokens":10}}`)
 
 	normalized := dropTrailingGeminiModelTurn(body)
 	var req map[string]any
@@ -954,6 +954,15 @@ func TestDropTrailingGeminiModelTurn(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, contents, 1)
 	require.Equal(t, "user", contents[0].(map[string]any)["role"])
+}
+
+func TestDropTrailingGeminiModelTurn_TrimsWrappedRequest(t *testing.T) {
+	body := []byte(`{"model":"gemini-test","request":{"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"prefill"}]}]}}`)
+
+	normalized := dropTrailingGeminiModelTurn(body)
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(normalized, &req))
+	require.Len(t, req["request"].(map[string]any)["contents"], 1)
 }
 
 func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t *testing.T) {

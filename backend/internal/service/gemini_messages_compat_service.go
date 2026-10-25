@@ -3445,7 +3445,11 @@ func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
 	}
 
 	stripGeminiFunctionIDs(out)
-	return json.Marshal(out)
+	normalized, err := json.Marshal(out)
+	if err != nil {
+		return nil, err
+	}
+	return dropTrailingGeminiModelTurn(normalized), nil
 }
 
 func stripGeminiFunctionIDs(req map[string]any) {

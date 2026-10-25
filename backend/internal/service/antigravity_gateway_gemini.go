@@ -589,16 +589,32 @@ func dropTrailingGeminiModelTurn(body []byte) []byte {
 		return body
 	}
 
-	contents, ok := payload["contents"].([]any)
-	if !ok || len(contents) == 0 {
-		return body
-	}
-	last, ok := contents[len(contents)-1].(map[string]any)
-	if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(last["role"]))) != "model" {
-		return body
+	var trim func(map[string]any) bool
+	trim = func(request map[string]any) bool {
+		modified := false
+		if contents, ok := request["contents"].([]any); ok && len(contents) > 0 {
+			trimmed := len(contents)
+			for trimmed > 0 {
+				last, ok := contents[trimmed-1].(map[string]any)
+				if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(last["role"]))) != "model" {
+					break
+				}
+				trimmed--
+			}
+			if trimmed != len(contents) {
+				request["contents"] = contents[:trimmed]
+				modified = true
+			}
+		}
+		if nested, ok := request["request"].(map[string]any); ok && trim(nested) {
+			modified = true
+		}
+		return modified
 	}
 
-	payload["contents"] = contents[:len(contents)-1]
+	if !trim(payload) {
+		return body
+	}
 	normalized, err := json.Marshal(payload)
 	if err != nil {
 		return body
