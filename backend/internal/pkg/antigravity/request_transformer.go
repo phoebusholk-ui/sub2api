@@ -472,6 +472,11 @@ func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isT
 			Parts: parts,
 		})
 	}
+	// Gemini does not support assistant/model prefill requests. Drop only the
+	// trailing model turn; model turns in conversation history remain intact.
+	if len(contents) > 0 && contents[len(contents)-1].Role == "model" {
+		contents = contents[:len(contents)-1]
+	}
 
 	return contents, systemParts, strippedThinking, nil
 }

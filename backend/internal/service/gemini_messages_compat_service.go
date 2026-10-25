@@ -3625,6 +3625,13 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 			"parts": parts,
 		})
 	}
+	// Gemini does not support assistant/model prefill requests. Drop only the
+	// trailing model turn; model turns in conversation history remain intact.
+	if len(out) > 0 {
+		if last, ok := out[len(out)-1].(map[string]any); ok && last["role"] == "model" {
+			out = out[:len(out)-1]
+		}
+	}
 	return out, nil
 }
 

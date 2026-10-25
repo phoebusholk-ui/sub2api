@@ -484,7 +484,7 @@ func TestTransformClaudeToGeminiWithOptions_MessageRoles(t *testing.T) {
 		}
 	})
 
-	t.Run("assistant role still maps to model", func(t *testing.T) {
+	t.Run("assistant role still maps to model in history", func(t *testing.T) {
 		req := transform(t, &ClaudeRequest{
 			Model: "claude-3-5-sonnet-latest",
 			Messages: []ClaudeMessage{
@@ -492,12 +492,29 @@ func TestTransformClaudeToGeminiWithOptions_MessageRoles(t *testing.T) {
 					Role:    "assistant",
 					Content: json.RawMessage(`"hello from assistant"`),
 				},
+				{
+					Role:    "user",
+					Content: json.RawMessage(`"next question"`),
+				},
+			},
+		})
+
+		require.Len(t, req.Request.Contents, 2)
+		require.Equal(t, "model", req.Request.Contents[0].Role)
+		require.Equal(t, "hello from assistant", req.Request.Contents[0].Parts[0].Text)
+	})
+
+	t.Run("trailing assistant prefill is dropped for Gemini", func(t *testing.T) {
+		req := transform(t, &ClaudeRequest{
+			Model: "claude-3-5-sonnet-latest",
+			Messages: []ClaudeMessage{
+				{Role: "user", Content: json.RawMessage(`"question"`)},
+				{Role: "assistant", Content: json.RawMessage(`"prefill"`)},
 			},
 		})
 
 		require.Len(t, req.Request.Contents, 1)
-		require.Equal(t, "model", req.Request.Contents[0].Role)
-		require.Equal(t, "hello from assistant", req.Request.Contents[0].Parts[0].Text)
+		require.Equal(t, "user", req.Request.Contents[0].Role)
 	})
 
 	t.Run("top level and message system instructions are merged", func(t *testing.T) {

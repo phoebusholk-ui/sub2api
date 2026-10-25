@@ -924,6 +924,20 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 	}
 }
 
+func TestConvertClaudeMessagesToGeminiGenerateContent_DropsTrailingAssistantPrefill(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"question"},{"role":"assistant","content":"prefill"}]}`)
+
+	converted, err := convertClaudeMessagesToGeminiGenerateContent(body)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(converted, &req))
+	contents, ok := req["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, 1)
+	require.Equal(t, "user", contents[0].(map[string]any)["role"])
+}
+
 func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t *testing.T) {
 	claudeReq := map[string]any{
 		"messages": []any{
