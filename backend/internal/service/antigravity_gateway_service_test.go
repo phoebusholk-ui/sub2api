@@ -1047,6 +1047,7 @@ func TestAntigravityGatewayService_ForwardGemini_RetriesCorruptedThoughtSignatur
 			{"role": "user", "parts": []map[string]any{{"text": "hello"}}},
 			{"role": "model", "parts": []map[string]any{{"text": "thinking", "thought": true, "thoughtSignature": "sig_bad_1"}}},
 			{"role": "model", "parts": []map[string]any{{"functionCall": map[string]any{"name": "toolA", "args": map[string]any{"x": 1}}, "thoughtSignature": "sig_bad_2"}}},
+			{"role": "user", "parts": []map[string]any{{"functionResponse": map[string]any{"name": "toolA", "response": map[string]any{"ok": true}}}}},
 		},
 	})
 	require.NoError(t, err)
@@ -1134,6 +1135,7 @@ func TestAntigravityGatewayService_ForwardGemini_SignatureRetryPropagatesFailove
 		"contents": []map[string]any{
 			{"role": "user", "parts": []map[string]any{{"text": "hello"}}},
 			{"role": "model", "parts": []map[string]any{{"text": "thinking", "thought": true, "thoughtSignature": "sig_bad_1"}}},
+			{"role": "user", "parts": []map[string]any{{"functionResponse": map[string]any{"name": "toolA", "response": map[string]any{"ok": true}}}}},
 		},
 	})
 	require.NoError(t, err)
