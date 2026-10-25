@@ -541,7 +541,7 @@ func TestTransformClaudeToGeminiWithOptions_MessageRoles(t *testing.T) {
 		require.Equal(t, "user", req.Request.Contents[0].Role)
 	})
 
-	t.Run("ordinary user assistant conversation is unchanged", func(t *testing.T) {
+	t.Run("ordinary user assistant history is preserved before the next user turn", func(t *testing.T) {
 		req := transform(t, &ClaudeRequest{
 			Model: "claude-3-5-sonnet-latest",
 			Messages: []ClaudeMessage{
@@ -553,14 +553,20 @@ func TestTransformClaudeToGeminiWithOptions_MessageRoles(t *testing.T) {
 					Role:    "assistant",
 					Content: json.RawMessage(`"answer"`),
 				},
+				{
+					Role:    "user",
+					Content: json.RawMessage(`"follow-up"`),
+				},
 			},
 		})
 
-		require.Len(t, req.Request.Contents, 2)
+		require.Len(t, req.Request.Contents, 3)
 		require.Equal(t, "user", req.Request.Contents[0].Role)
 		require.Equal(t, "question", req.Request.Contents[0].Parts[0].Text)
 		require.Equal(t, "model", req.Request.Contents[1].Role)
 		require.Equal(t, "answer", req.Request.Contents[1].Parts[0].Text)
+		require.Equal(t, "user", req.Request.Contents[2].Role)
+		require.Equal(t, "follow-up", req.Request.Contents[2].Parts[0].Text)
 	})
 }
 
