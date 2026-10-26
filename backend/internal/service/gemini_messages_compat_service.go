@@ -600,7 +600,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, "", err
 			}
 
-			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
+			// Keep the last outbound boundary safe: request normalization may
+			// rebuild the JSON after the earlier turn cleanup.
+			restGeminiReq := dropTrailingGeminiModelTurn(normalizeGeminiRequestForAIStudio(geminiReq))
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
 			if err != nil {
 				return nil, "", err
@@ -674,7 +676,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					return nil, "", err
 				}
 
-				restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
+				restGeminiReq := dropTrailingGeminiModelTurn(normalizeGeminiRequestForAIStudio(geminiReq))
 				upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
 				if err != nil {
 					return nil, "", err
@@ -697,7 +699,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, "", err
 			}
 
-			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
+			restGeminiReq := dropTrailingGeminiModelTurn(normalizeGeminiRequestForAIStudio(geminiReq))
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
 			if err != nil {
 				return nil, "", err
