@@ -125,6 +125,24 @@ func TestGeminiForwardAsChatCompletions_OAuthRoutesToGeminiAndReturnsChatFormat(
 	require.Equal(t, float64(10), usage["total_tokens"])
 }
 
+func TestDropTrailingGeminiModelTurn(t *testing.T) {
+	for _, body := range []string{
+		`{"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"prefill"}]}]}`,
+		`{"model":"gemini-test","request":{"contents":[{"role":"user","parts":[{"text":"question"}]},{"role":"model","parts":[{"text":"prefill"}]}]}}`,
+	} {
+		normalized := dropTrailingGeminiModelTurn([]byte(body))
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(normalized, &payload))
+		if nested, ok := payload["request"].(map[string]any); ok {
+			payload = nested
+		}
+		contents, ok := payload["contents"].([]any)
+		require.True(t, ok)
+		require.Len(t, contents, 1)
+		require.Equal(t, "user", contents[0].(map[string]any)["role"])
+	}
+}
+
 func TestGeminiForwardAsChatCompletions_StreamsOpenAIChunksFromGeminiSSE(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
