@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -109,6 +110,11 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	upstreamBody := body
 	if upstreamModel != originalModel {
 		upstreamBody = ReplaceModelInBody(body, upstreamModel)
+	}
+	// OpenAI-compatible relays that translate Gemini reject assistant prefill
+	// requests because their native request would end in a model turn.
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(upstreamModel)), "gemini-") {
+		upstreamBody = dropTrailingGeminiAssistantMessages(upstreamBody)
 	}
 	if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(upstreamBody, upstreamModel); normalized {
 		upstreamBody = normalizedBody
@@ -277,6 +283,34 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 		result.UpstreamEndpoint = grokChatRawEndpoint
 	}
 	return result, forwardErr
+}
+
+func dropTrailingGeminiAssistantMessages(body []byte) []byte {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) == 0 {
+		return body
+	}
+	trimmed := len(messages)
+	for trimmed > 0 {
+		message, ok := messages[trimmed-1].(map[string]any)
+		if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(message["role"]))) != "assistant" {
+			break
+		}
+		trimmed--
+	}
+	if trimmed == len(messages) {
+		return body
+	}
+	payload["messages"] = messages[:trimmed]
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return normalized
 }
 
 func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, error) {

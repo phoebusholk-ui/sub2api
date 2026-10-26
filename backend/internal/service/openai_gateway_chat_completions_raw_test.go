@@ -53,6 +53,22 @@ func TestBuildOpenAIChatCompletionsURL(t *testing.T) {
 	}
 }
 
+func TestDropTrailingGeminiAssistantMessages(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"model":"gemini-3.8-flash","messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"prefill"},{"role":"assistant","tool_calls":[]}]}`)
+	normalized := dropTrailingGeminiAssistantMessages(body)
+	require.Equal(t, 1, len(gjson.GetBytes(normalized, "messages").Array()))
+	require.Equal(t, "user", gjson.GetBytes(normalized, "messages.0.role").String())
+}
+
+func TestDropTrailingGeminiAssistantMessagesKeepsUserTerminatedConversation(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"model":"gemini-3.8-flash","messages":[{"role":"user","content":"hello"}]}`)
+	require.Equal(t, string(body), string(dropTrailingGeminiAssistantMessages(body)))
+}
+
 // TestBuildOpenAIResponsesURL_ProbeURL 锁定 probe/测试端点使用的 URL 构建逻辑，
 // 确保 buildOpenAIResponsesURL 对标准 OpenAI base_url 格式均拼出 `/v1/responses`。
 func TestBuildOpenAIResponsesURL_ProbeURL(t *testing.T) {
