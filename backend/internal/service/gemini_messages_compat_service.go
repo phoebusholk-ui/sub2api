@@ -599,7 +599,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, "", err
 			}
 
-			restGeminiReq := dropTrailingGeminiModelTurn(normalizeGeminiRequestForAIStudio(geminiReq))
+			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
 			if err != nil {
 				return nil, "", err
@@ -651,7 +651,6 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				}
 				wrapped["request"] = inner
 				wrappedBytes, _ := json.Marshal(wrapped)
-				wrappedBytes = dropTrailingGeminiModelTurn(wrappedBytes)
 
 				upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(wrappedBytes))
 				if err != nil {
@@ -674,7 +673,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					return nil, "", err
 				}
 
-				restGeminiReq := dropTrailingGeminiModelTurn(normalizeGeminiRequestForAIStudio(geminiReq))
+				restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 				upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
 				if err != nil {
 					return nil, "", err
@@ -697,7 +696,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, "", err
 			}
 
-			restGeminiReq := dropTrailingGeminiModelTurn(normalizeGeminiRequestForAIStudio(geminiReq))
+			restGeminiReq := normalizeGeminiRequestForAIStudio(geminiReq)
 			upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(restGeminiReq))
 			if err != nil {
 				return nil, "", err
@@ -1075,6 +1074,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		FirstTokenMs:                  firstTokenMs,
 		ReasoningEffort:               extractGeminiReasoningEffortFromBody(geminiReq),
 		ClientDisconnect:              clientDisconnect,
+		ImageEndpoint:                 imageCount > 0,
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
@@ -1126,9 +1126,6 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 	if action != "countTokens" && geminiImageGenerationDenied(c, body, originalModel, mappedModel) {
 		return nil, s.writeGoogleError(c, http.StatusBadRequest, ImageGenerationPermissionMessage())
-	}
-	if action != "countTokens" {
-		body = dropTrailingGeminiModelTurn(body)
 	}
 
 	proxyURL := ""
@@ -1613,6 +1610,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
 		ClientDisconnect:              clientDisconnect,
+		ImageEndpoint:                 imageCount > 0,
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
@@ -3629,15 +3627,6 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 			"parts": parts,
 		})
 	}
-	// Gemini does not support assistant/model prefill requests. Drop trailing
-	// model turns; model turns in conversation history remain intact.
-	for len(out) > 0 {
-		last, ok := out[len(out)-1].(map[string]any)
-		if !ok || last["role"] != "model" {
-			break
-		}
-		out = out[:len(out)-1]
-	}
 	return out, nil
 }
 
@@ -3809,52 +3798,6 @@ func normalizeGeminiRequestForAIStudio(body []byte) []byte {
 		return body
 	}
 
-	normalized, err := json.Marshal(payload)
-	if err != nil {
-		return body
-	}
-	return normalized
-}
-
-// Gemini generation requests must end with a user turn, including wrapped Code Assist requests.
-func dropTrailingGeminiModelTurn(body []byte) []byte {
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return body
-	}
-	changed := false
-	if contents, ok := payload["contents"].([]any); ok {
-		trimmed := len(contents)
-		for trimmed > 0 {
-			last, ok := contents[trimmed-1].(map[string]any)
-			if !ok {
-				break
-			}
-			role := strings.ToLower(strings.TrimSpace(fmt.Sprint(last["role"])))
-			if role != "model" && role != "assistant" {
-				break
-			}
-			trimmed--
-		}
-		if trimmed != len(contents) {
-			payload["contents"] = contents[:trimmed]
-			changed = true
-		}
-	}
-	if nested, ok := payload["request"].(map[string]any); ok {
-		normalized, err := json.Marshal(nested)
-		if err == nil {
-			trimmed := dropTrailingGeminiModelTurn(normalized)
-			var cleaned map[string]any
-			if json.Unmarshal(trimmed, &cleaned) == nil {
-				payload["request"] = cleaned
-				changed = changed || string(trimmed) != string(normalized)
-			}
-		}
-	}
-	if !changed {
-		return body
-	}
 	normalized, err := json.Marshal(payload)
 	if err != nil {
 		return body

@@ -2,56 +2,10 @@ package service
 
 import (
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
-
-func TestGeminiChatResponseToResponses(t *testing.T) {
-	chatResp := &apicompat.ChatCompletionsResponse{
-		ID: "chatcmpl_test", Object: "chat.completion", Created: 123, Model: "gemini-test",
-		Choices: []apicompat.ChatChoice{{Index: 0, Message: apicompat.ChatMessage{Role: "assistant", Content: json.RawMessage(`"hello"`)}, FinishReason: "stop"}},
-		Usage:   &apicompat.ChatUsage{PromptTokens: 2, CompletionTokens: 1, TotalTokens: 3},
-	}
-
-	got := geminiChatResponseToResponses(chatResp)
-	require.Equal(t, "response", got.Object)
-	require.Equal(t, "gemini-test", got.Model)
-	require.Equal(t, "completed", got.Status)
-	require.Len(t, got.Output, 1)
-	require.Equal(t, "message", got.Output[0].Type)
-	require.Equal(t, "hello", got.Output[0].Content[0].Text)
-	require.Equal(t, 2, got.Usage.InputTokens)
-	require.Equal(t, 1, got.Usage.OutputTokens)
-}
-
-func TestGeminiResponsesStreamingEmitsResponsesLifecycle(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-	service := &GeminiMessagesCompatService{}
-	resp := &http.Response{
-		Header: http.Header{"Content-Type": []string{"text/event-stream"}},
-		Body:   io.NopCloser(strings.NewReader("data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}\n\ndata: {\"candidates\":[{\"finishReason\":\"STOP\",\"usageMetadata\":{\"promptTokenCount\":2,\"candidatesTokenCount\":1,\"totalTokenCount\":3}}]}\n\n")),
-	}
-
-	_, err := service.handleChatCompletionsStreamingResponseFromGemini(ctx, resp, time.Now(), "gemini-test", false, false, true)
-	require.NoError(t, err)
-	body := recorder.Body.String()
-	require.Contains(t, body, "event: response.created")
-	require.Contains(t, body, "event: response.output_text.delta")
-	require.Contains(t, body, "event: response.completed")
-	require.NotContains(t, body, "data: [DONE]")
-	require.Contains(t, body, `"status":"completed"`)
-}
 
 func TestGeminiResponseToChatCompletionsPreservesInlineData(t *testing.T) {
 	tests := []struct {
