@@ -72,7 +72,7 @@ func TestGeminiForwardAsChatCompletions_OAuthRoutesToGeminiAndReturnsChatFormat(
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	body := []byte(`{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"hi"}]}`)
+	body := []byte(`{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"older prefill"},{"role":"assistant","content":"latest prefill"}]}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
 
 	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body)
@@ -95,7 +95,15 @@ func TestGeminiForwardAsChatCompletions_OAuthRoutesToGeminiAndReturnsChatFormat(
 	require.NoError(t, json.Unmarshal(sentBody, &sent))
 	require.Equal(t, "gemini-2.5-flash", sent["model"])
 	require.Equal(t, "project-1", sent["project"])
-	require.Contains(t, fmt.Sprint(sent["request"]), "hi")
+	request, ok := sent["request"].(map[string]any)
+	require.True(t, ok)
+	contents, ok := request["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, 1)
+	content, ok := contents[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "user", content["role"])
+	require.Contains(t, fmt.Sprint(contents[0]), "hi")
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
@@ -897,6 +905,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 					},
 				},
 			},
+			map[string]any{"role": "user", "content": "continue"},
 		},
 		"tools": []any{
 			map[string]any{
@@ -922,6 +931,22 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 	if !strings.Contains(s, "\"thoughtSignature\":\""+geminiDummyThoughtSignature+"\"") {
 		t.Fatalf("expected injected thoughtSignature %q, got: %s", geminiDummyThoughtSignature, s)
 	}
+}
+
+func TestConvertClaudeMessagesToGeminiGenerateContent_DropsTrailingAssistantPrefill(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"question"},{"role":"assistant","content":"prefill"}]}`)
+
+	converted, err := convertClaudeMessagesToGeminiGenerateContent(body)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(converted, &req))
+	contents, ok := req["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, 1)
+	content, ok := contents[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "user", content["role"])
 }
 
 func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t *testing.T) {
