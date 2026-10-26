@@ -69,6 +69,15 @@ func TestDropTrailingGeminiAssistantMessagesKeepsUserTerminatedConversation(t *t
 	require.Equal(t, string(body), string(dropTrailingGeminiAssistantMessages(body)))
 }
 
+func TestDropTrailingGeminiAssistantMessagesTrimsModelRoleAndRecognizesAliases(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"model":"models/gemini-3.8-flash","messages":[{"role":"user","content":"hello"},{"role":"model","content":"prefill"}]}`)
+	normalized := dropTrailingGeminiAssistantMessages(body)
+	require.Equal(t, 1, len(gjson.GetBytes(normalized, "messages").Array()))
+	require.True(t, isGeminiModelName(gjson.GetBytes(body, "model").String()))
+}
+
 // TestBuildOpenAIResponsesURL_ProbeURL 锁定 probe/测试端点使用的 URL 构建逻辑，
 // 确保 buildOpenAIResponsesURL 对标准 OpenAI base_url 格式均拼出 `/v1/responses`。
 func TestBuildOpenAIResponsesURL_ProbeURL(t *testing.T) {

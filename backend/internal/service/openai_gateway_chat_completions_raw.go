@@ -113,7 +113,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 	}
 	// OpenAI-compatible relays that translate Gemini reject assistant prefill
 	// requests because their native request would end in a model turn.
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(upstreamModel)), "gemini-") {
+	if isGeminiModelName(originalModel) || isGeminiModelName(upstreamModel) {
 		upstreamBody = dropTrailingGeminiAssistantMessages(upstreamBody)
 	}
 	if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(upstreamBody, upstreamModel); normalized {
@@ -131,6 +131,9 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
 		return nil, policyErr
 	}
 	upstreamBody = updatedBody
+	if isGeminiModelName(originalModel) || isGeminiModelName(upstreamModel) {
+		upstreamBody = dropTrailingGeminiAssistantMessages(upstreamBody)
+	}
 	// Keep the final outbound tier separate from the observed response tier so
 	// usage recording can apply the selected credential's response contract.
 	serviceTier := extractOpenAIServiceTierFromBody(upstreamBody)
@@ -297,7 +300,11 @@ func dropTrailingGeminiAssistantMessages(body []byte) []byte {
 	trimmed := len(messages)
 	for trimmed > 0 {
 		message, ok := messages[trimmed-1].(map[string]any)
-		if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(message["role"]))) != "assistant" {
+		if !ok {
+			break
+		}
+		role := strings.ToLower(strings.TrimSpace(fmt.Sprint(message["role"])))
+		if role != "assistant" && role != "model" {
 			break
 		}
 		trimmed--
@@ -311,6 +318,17 @@ func dropTrailingGeminiAssistantMessages(body []byte) []byte {
 		return body
 	}
 	return normalized
+}
+
+func isGeminiModelName(model string) bool {
+	name := strings.ToLower(strings.TrimSpace(model))
+	name = strings.TrimPrefix(name, "models/")
+	name = strings.TrimPrefix(name, "google/")
+	name = strings.TrimPrefix(name, "google-ai/")
+	if slash := strings.LastIndexByte(name, '/'); slash >= 0 {
+		name = name[slash+1:]
+	}
+	return strings.HasPrefix(name, "gemini-") || strings.HasPrefix(name, "gemini_")
 }
 
 func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, error) {

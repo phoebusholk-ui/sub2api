@@ -596,7 +596,11 @@ func dropTrailingGeminiModelTurn(body []byte) []byte {
 			trimmed := len(contents)
 			for trimmed > 0 {
 				last, ok := contents[trimmed-1].(map[string]any)
-				if !ok || strings.ToLower(strings.TrimSpace(fmt.Sprint(last["role"]))) != "model" {
+				if !ok {
+					break
+				}
+				role := strings.ToLower(strings.TrimSpace(fmt.Sprint(last["role"])))
+				if role != "model" && role != "assistant" {
 					break
 				}
 				trimmed--

@@ -561,6 +561,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	geminiReq = ensureGeminiFunctionCallThoughtSignatures(geminiReq)
 	includeThoughts := req.Stream && claudeRequestEnablesThinking(body)
 	geminiReq = applyGeminiCompatThinkingConfig(geminiReq, body, mappedModel, includeThoughts)
+	geminiReq = dropTrailingGeminiModelTurn(geminiReq)
 	originalClaudeBody := body
 
 	proxyURL := ""
