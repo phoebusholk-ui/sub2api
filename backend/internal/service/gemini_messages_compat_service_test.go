@@ -139,7 +139,9 @@ func TestDropTrailingGeminiModelTurn(t *testing.T) {
 		contents, ok := payload["contents"].([]any)
 		require.True(t, ok)
 		require.Len(t, contents, 1)
-		require.Equal(t, "user", contents[0].(map[string]any)["role"])
+		lastContent, ok := contents[0].(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, "user", lastContent["role"])
 	}
 }
 
