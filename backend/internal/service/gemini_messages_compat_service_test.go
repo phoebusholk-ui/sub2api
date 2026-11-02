@@ -952,6 +952,12 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 					},
 				},
 			},
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "tool_result", "tool_use_id": "toolu_123", "content": "done"},
+				},
+			},
 		},
 		"tools": []any{
 			map[string]any{
