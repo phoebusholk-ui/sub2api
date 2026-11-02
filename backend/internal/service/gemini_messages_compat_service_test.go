@@ -117,6 +117,61 @@ func TestGeminiForwardAsChatCompletions_OAuthRoutesToGeminiAndReturnsChatFormat(
 	require.Equal(t, float64(10), usage["total_tokens"])
 }
 
+func TestDropTrailingGeminiModelTurn(t *testing.T) {
+	body, err := json.Marshal(map[string]any{"contents": []any{
+		map[string]any{"role": "user", "parts": []any{map[string]any{"text": "question"}}},
+		map[string]any{"role": "model", "parts": []any{map[string]any{"text": "answer"}}},
+		map[string]any{"role": "assistant", "parts": []any{map[string]any{"text": "prefill"}}},
+	}})
+	require.NoError(t, err)
+	var got struct {
+		Contents []struct{ Role string }
+	}
+	require.NoError(t, json.Unmarshal(dropTrailingGeminiModelTurn(body), &got))
+	require.Len(t, got.Contents, 1)
+	require.Equal(t, "user", got.Contents[0].Role)
+	userOnly, err := json.Marshal(map[string]any{"contents": []any{map[string]any{"role": "user"}}})
+	require.NoError(t, err)
+	require.Equal(t, userOnly, dropTrailingGeminiModelTurn(userOnly))
+}
+
+func TestGeminiForwardAsChatCompletions_DropsTerminalAssistantTurn(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	httpStub := &geminiCompatHTTPUpstreamStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(
+			`{"candidates":[{"content":{"parts":[{"text":"done"}]},"finishReason":"STOP"}]}`,
+		)),
+	}}
+	svc := &GeminiMessagesCompatService{httpUpstream: httpStub, cfg: &config.Config{}}
+	account := &Account{
+		ID: 103, Platform: PlatformGemini, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "gemini-api-key"}, Concurrency: 1,
+	}
+	body := []byte(`{"model":"gemini-4-argon","messages":[{"role":"user","content":"finish this"},{"role":"assistant","content":"The answer is"}]}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	postedBody, err := io.ReadAll(httpStub.lastReq.Body)
+	require.NoError(t, err)
+	var posted struct {
+		Contents []struct {
+			Role  string
+			Parts []map[string]any
+		}
+	}
+	require.NoError(t, json.Unmarshal(postedBody, &posted))
+	require.Len(t, posted.Contents, 1)
+	require.Equal(t, "user", posted.Contents[0].Role)
+	require.Equal(t, "finish this", posted.Contents[0].Parts[0]["text"])
+}
+
 func TestGeminiForwardAsChatCompletions_StreamsOpenAIChunksFromGeminiSSE(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -895,6 +950,12 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
 						"input": map[string]any{"path": "a.txt", "content": "x"},
 						// no signature on purpose
 					},
+				},
+			},
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "tool_result", "tool_use_id": "toolu_123", "content": "done"},
 				},
 			},
 		},

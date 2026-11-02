@@ -561,6 +561,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	geminiReq = ensureGeminiFunctionCallThoughtSignatures(geminiReq)
 	includeThoughts := req.Stream && claudeRequestEnablesThinking(body)
 	geminiReq = applyGeminiCompatThinkingConfig(geminiReq, body, mappedModel, includeThoughts)
+	geminiReq = dropTrailingGeminiModelTurn(geminiReq)
 	originalClaudeBody := body
 
 	proxyURL := ""
@@ -1126,6 +1127,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 	if action != "countTokens" && geminiImageGenerationDenied(c, body, originalModel, mappedModel) {
 		return nil, s.writeGoogleError(c, http.StatusBadRequest, ImageGenerationPermissionMessage())
+	}
+	if action != "countTokens" {
+		body = dropTrailingGeminiModelTurn(body)
 	}
 
 	proxyURL := ""
@@ -3627,6 +3631,14 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 			"parts": parts,
 		})
 	}
+	// Gemini does not support assistant/model prefill requests.
+	for len(out) > 0 {
+		last, ok := out[len(out)-1].(map[string]any)
+		if !ok || last["role"] != "model" {
+			break
+		}
+		out = out[:len(out)-1]
+	}
 	return out, nil
 }
 
@@ -3803,6 +3815,39 @@ func normalizeGeminiRequestForAIStudio(body []byte) []byte {
 		return body
 	}
 	return normalized
+}
+
+// Gemini generation requests cannot end with a model turn.
+func dropTrailingGeminiModelTurn(body []byte) []byte {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	contents, ok := payload["contents"].([]any)
+	if !ok {
+		return body
+	}
+	trimmed := len(contents)
+	for trimmed > 0 {
+		last, ok := contents[trimmed-1].(map[string]any)
+		if !ok {
+			break
+		}
+		role, _ := last["role"].(string)
+		if !strings.EqualFold(strings.TrimSpace(role), "model") && !strings.EqualFold(strings.TrimSpace(role), "assistant") {
+			break
+		}
+		trimmed--
+	}
+	if trimmed == len(contents) {
+		return body
+	}
+	payload["contents"] = contents[:trimmed]
+	cleaned, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return cleaned
 }
 
 func isClaudeWebSearchToolMap(tool map[string]any) bool {
